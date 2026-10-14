@@ -9,6 +9,9 @@ on:
       ref:
         description: Engine branch, tag or commit
         default: main
+      platforms:
+        description: "Platforms to build (a subset of: linuxbsd windows macos)"
+        default: "linuxbsd windows macos"
       tag:
         description: "Release tag to publish (empty: build only, keep the artifacts for 14 days)"
         default: ""
@@ -20,6 +23,7 @@ env:
 jobs:
   build:
     name: ${{ matrix.platform }} ${{ matrix.name }}
+    if: contains(inputs.platforms, matrix.platform)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     strategy:
@@ -69,10 +73,10 @@ jobs:
         run: Tools/Scripts/install_vulkan_sdk_macos.sh
 
       - name: SCons cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.SCONS_CACHE }}
-          key: scons-${{ matrix.platform }}-${{ matrix.name }}-${{ github.run_id }}
+          key: scons-${{ matrix.platform }}-${{ matrix.name }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: scons-${{ matrix.platform }}-${{ matrix.name }}-
 
       - name: Build
@@ -80,6 +84,14 @@ jobs:
         env:
           GODOT_SCRIPT_ENCRYPTION_KEY: ${{ secrets.GODOT_SCRIPT_ENCRYPTION_KEY }}
         run: ./build.sh ${{ matrix.task }} --profile release --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
+
+      # Saved even when the build fails, so a rerun starts from the objects already built.
+      - name: Save the SCons cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.SCONS_CACHE }}
+          key: scons-${{ matrix.platform }}-${{ matrix.name }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # The binaries and the libraries they need beside them (OpenAL Soft, steam_api): compiled only, never Valve's
       # headers or import libraries.
