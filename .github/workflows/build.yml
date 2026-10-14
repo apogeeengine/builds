@@ -23,7 +23,7 @@ env:
 jobs:
   build:
     name: ${{ matrix.platform }} ${{ matrix.name }}
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.platform == 'windows' && 'windows-2022' || matrix.platform == 'macos' && 'macos-15' || 'ubuntu-24.04' }}
     timeout-minutes: 360
     strategy:
       fail-fast: false
@@ -31,13 +31,12 @@ jobs:
         platform: ${{ fromJSON(inputs.platforms) }}
         name: [sdk, editor, template_release, template_debug]
         include:
-          - { platform: linuxbsd, runner: ubuntu-24.04, arch: x86_64 }
-          - { platform: windows, runner: windows-2022, arch: x86_64 }
-          - { platform: macos, runner: macos-15, arch: universal }
           - { name: sdk, task: "editor --sdk" }
           - { name: editor, task: editor }
           - { name: template_release, task: "templates --templates release" }
           - { name: template_debug, task: "templates --templates debug" }
+    env:
+      ARCH: ${{ matrix.platform == 'macos' && 'universal' || 'x86_64' }}
     defaults:
       run:
         shell: bash
@@ -82,7 +81,7 @@ jobs:
         working-directory: engine
         env:
           GODOT_SCRIPT_ENCRYPTION_KEY: ${{ secrets.GODOT_SCRIPT_ENCRYPTION_KEY }}
-        run: ./build.sh ${{ matrix.task }} --profile release --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
+        run: ./build.sh ${{ matrix.task }} --profile release --platform ${{ matrix.platform }} --arch ${{ env.ARCH }}
 
       # Saved even when the build fails, so a rerun starts from the objects already built.
       - name: Save the SCons cache
@@ -99,7 +98,7 @@ jobs:
           mkdir out
           cd engine/Bin
           shopt -s nullglob
-          files=(apogee.*.${{ matrix.arch }}* *.so* *.dll *.dylib)
+          files=(apogee.*.${{ env.ARCH }}* *.so* *.dll *.dylib)
           cp -a "${files[@]}" ../../out/
           cd ../..
           rm -f out/*.lib out/*.exp
@@ -107,7 +106,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: apogee-${{ matrix.platform }}-${{ matrix.name }}-${{ matrix.arch }}
+          name: apogee-${{ matrix.platform }}-${{ matrix.name }}-${{ env.ARCH }}
           path: out
           retention-days: 14
 
