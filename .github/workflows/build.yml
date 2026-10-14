@@ -1,0 +1,130 @@
+name: Build
+
+# Builds the Apogee Engine from the private source repo (checked out with a read-only deploy key) on this public
+# repo's free runners: the SDK (mods and maps, no game exports), the editor and the export templates, for Linux,
+# Windows and macOS. Run it by hand with an engine ref; give a tag to publish the binaries as a release.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Engine branch, tag or commit
+        default: main
+      tag:
+        description: Release tag to publish (empty: build only, keep the artifacts for 14 days)
+        default: ""
+
+env:
+  SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+  SCONS_CACHE_LIMIT: "4096"
+
+jobs:
+  build:
+    name: ${{ matrix.platform }} ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linuxbsd, windows, macos]
+        name: [sdk, editor, template_release, template_debug]
+        include:
+          - { platform: linuxbsd, runner: ubuntu-24.04, arch: x86_64 }
+          - { platform: windows, runner: windows-2022, arch: x86_64 }
+          - { platform: macos, runner: macos-15, arch: universal }
+          - { name: sdk, task: "editor --sdk" }
+          - { name: editor, task: editor }
+          - { name: template_release, task: "templates --templates release" }
+          - { name: template_debug, task: "templates --templates debug" }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Engine source
+        uses: actions/checkout@v4
+        with:
+          repository: apogeeengine/Apogee.Engine
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.ENGINE_DEPLOY_KEY }}
+          path: engine
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: SCons
+        run: python -m pip install scons
+
+      - name: Linux packages
+        if: matrix.platform == 'linuxbsd'
+        run: sudo apt-get update && sudo apt-get install -y libwayland-bin lld
+
+      - name: Direct3D 12 SDKs
+        if: matrix.platform == 'windows'
+        working-directory: engine
+        run: python Tools/Scripts/install_d3d12_sdk_windows.py
+
+      - name: Vulkan SDK (MoltenVK)
+        if: matrix.platform == 'macos'
+        working-directory: engine
+        run: Tools/Scripts/install_vulkan_sdk_macos.sh
+
+      - name: SCons cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SCONS_CACHE }}
+          key: scons-${{ matrix.platform }}-${{ matrix.name }}-${{ github.run_id }}
+          restore-keys: scons-${{ matrix.platform }}-${{ matrix.name }}-
+
+      - name: Build
+        working-directory: engine
+        env:
+          GODOT_SCRIPT_ENCRYPTION_KEY: ${{ secrets.GODOT_SCRIPT_ENCRYPTION_KEY }}
+        run: ./build.sh ${{ matrix.task }} --profile release --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
+
+      # The binaries and the libraries they need beside them (OpenAL Soft, steam_api): compiled only, never Valve's
+      # headers or import libraries.
+      - name: Package
+        run: |
+          mkdir out
+          cd engine/Bin
+          shopt -s nullglob
+          files=(apogee.*.${{ matrix.arch }}* *.so* *.dll *.dylib)
+          cp -a "${files[@]}" ../../out/
+          cd ../..
+          rm -f out/*.lib out/*.exp
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apogee-${{ matrix.platform }}-${{ matrix.name }}-${{ matrix.arch }}
+          path: out
+          retention-days: 14
+
+  release:
+    name: Release ${{ inputs.tag }}
+    if: inputs.tag != ''
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Zip each artifact
+        run: |
+          mkdir dist
+          for d in artifacts/*/; do
+            n="$(basename "$d")"
+            (cd "$d" && zip -qr "../../dist/$n.zip" .)
+          done
+          cd dist && sha256sum *.zip > SHA256SUMS && ls -l
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ inputs.tag }}" dist/* --repo "$GITHUB_REPOSITORY" \
+            --title "Apogee Engine ${{ inputs.tag }}" \
+            --notes "Built from apogeeengine/Apogee.Engine @ ${{ inputs.ref }}. The SDK packs mods and maps; the editor and templates are for building games."
