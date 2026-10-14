@@ -10,7 +10,7 @@ on:
         description: Engine branch, tag or commit
         default: main
       tag:
-        description: Release tag to publish (empty: build only, keep the artifacts for 14 days)
+        description: "Release tag to publish (empty: build only, keep the artifacts for 14 days)"
         default: ""
 
 env:
