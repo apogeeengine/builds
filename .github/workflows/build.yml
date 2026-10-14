@@ -101,6 +101,7 @@ jobs:
           files=(apogee.*.${{ env.ARCH }}* *.so* *.dll *.dylib)
           cp -a "${files[@]}" ../../out/
           cd ../..
+          cp engine/Source/ThirdParty/openal-soft/COPYING-openal-soft.txt out/ # OpenAL Soft is LGPL: its text ships with it.
           rm -f out/*.lib out/*.exp
           ls -l out
 
@@ -118,18 +119,57 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Engine files for the templates
+        uses: actions/checkout@v4
+        with:
+          repository: apogeeengine/Apogee.Engine
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.ENGINE_DEPLOY_KEY }}
+          path: engine
+          sparse-checkout: |
+            Tools/Dist/macos_template.app
+          sparse-checkout-cone-mode: false
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
 
+      # What the editor's export looks for in <templates>/4.7.2.stable/, under Godot's names, with the libraries an
+      # export copies beside the game. Install it by unzipping into that folder (or Editor > Manage Export Templates).
+      - name: Export templates
+        run: |
+          a=artifacts
+          t=templates; mkdir -p $t
+          for target in release debug; do
+            cp $a/apogee-linuxbsd-template_$target-x86_64/apogee.linuxbsd.template_$target.x86_64 $t/linux_$target.x86_64
+            w=$a/apogee-windows-template_$target-x86_64
+            cp $w/apogee.windows.template_$target.x86_64.exe $t/windows_${target}_x86_64.exe
+            cp $w/apogee.windows.template_$target.x86_64.console.exe $t/windows_${target}_x86_64_console.exe
+          done
+          cp -n $a/apogee-linuxbsd-template_release-x86_64/*.so* $a/apogee-linuxbsd-template_release-x86_64/COPYING-openal-soft.txt $t/
+          cp -n $a/apogee-windows-template_release-x86_64/*.dll $t/
+          cp -n $a/apogee-macos-template_release-universal/*.dylib $t/
+          app=macos_template.app
+          cp -R engine/Tools/Dist/$app $app
+          mkdir -p $app/Contents/MacOS
+          for target in release debug; do
+            cp $a/apogee-macos-template_$target-universal/apogee.macos.template_$target.universal $app/Contents/MacOS/godot_macos_$target.universal
+            chmod +x $app/Contents/MacOS/godot_macos_$target.universal
+          done
+          zip -qry $t/macos.zip $app
+          echo "4.7.2.stable" > $t/version.txt
+          mkdir -p dist
+          zip -qr dist/apogee-export-templates.tpz $t
+          ls -l $t
+
       - name: Zip each artifact
         run: |
-          mkdir dist
+          mkdir -p dist
           for d in artifacts/*/; do
             n="$(basename "$d")"
             (cd "$d" && zip -qr "../../dist/$n.zip" .)
           done
-          cd dist && sha256sum *.zip > SHA256SUMS && ls -l
+          cd dist && sha256sum *.zip *.tpz > SHA256SUMS && ls -l
 
       - name: Publish
         env:
