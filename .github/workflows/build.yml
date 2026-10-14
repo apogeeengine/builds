@@ -10,8 +10,8 @@ on:
         description: Engine branch, tag or commit
         default: main
       platforms:
-        description: "Platforms to build (a subset of: linuxbsd windows macos)"
-        default: "linuxbsd windows macos"
+        description: "Platforms to build, a JSON list (a subset of linuxbsd, windows, macos)"
+        default: '["linuxbsd", "windows", "macos"]'
       tag:
         description: "Release tag to publish (empty: build only, keep the artifacts for 14 days)"
         default: ""
@@ -23,13 +23,12 @@ env:
 jobs:
   build:
     name: ${{ matrix.platform }} ${{ matrix.name }}
-    if: contains(inputs.platforms, matrix.platform)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
-        platform: [linuxbsd, windows, macos]
+        platform: ${{ fromJSON(inputs.platforms) }}
         name: [sdk, editor, template_release, template_debug]
         include:
           - { platform: linuxbsd, runner: ubuntu-24.04, arch: x86_64 }
