@@ -1,0 +1,54 @@
+name: Tests
+
+# The engine's tests: ./build.sh test builds the editor with the unit tests (doctest) and runs them, then the Luau tests
+# of the samples. Linux only for now (a dev build, cold, takes an hour or so).
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: main
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Engine branch, tag or commit
+        default: main
+
+env:
+  SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+  SCONS_CACHE_LIMIT: "4096"
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: apogeeengine/Apogee.Engine
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.ENGINE_DEPLOY_KEY }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: python -m pip install scons
+
+      - run: sudo apt-get update && sudo apt-get install -y libwayland-bin lld
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.SCONS_CACHE }}
+          key: scons-test-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: scons-test-
+
+      - name: Build and run the tests
+        run: ./build.sh test
+
+      - name: Save the SCons cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.SCONS_CACHE }}
+          key: scons-test-${{ github.run_id }}-${{ github.run_attempt }}

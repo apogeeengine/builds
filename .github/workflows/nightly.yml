@@ -1,0 +1,53 @@
+name: Nightly
+
+# Every night, if the engine's main has moved since the last nightly: builds it on the three platforms and replaces the
+# `nightly` prerelease (the docs, benchmarks and Headland's nightly use it), and runs the engine's tests.
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even if main has not moved
+        type: boolean
+        default: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.main.outputs.sha }}
+      changed: ${{ steps.main.outputs.changed }}
+    steps:
+      - id: main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY: ${{ secrets.ENGINE_DEPLOY_KEY }}
+        run: |
+          install -m 600 /dev/null "$RUNNER_TEMP/key"
+          printf '%s\n' "$KEY" > "$RUNNER_TEMP/key"
+          sha="$(GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/key -o StrictHostKeyChecking=accept-new" \
+            git ls-remote git@github.com:apogeeengine/Apogee.Engine.git refs/heads/main | cut -f1)"
+          last="$(gh release view nightly --repo "$GITHUB_REPOSITORY" --json body --jq .body 2> /dev/null | sed -n 's/^commit: //p' || true)"
+          echo "main $sha, last nightly $last"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ "$sha" != "$last" ] || [ "${{ inputs.force }}" = true ]; then echo "changed=true" >> "$GITHUB_OUTPUT"; else echo "changed=false" >> "$GITHUB_OUTPUT"; fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    uses: ./.github/workflows/build.yml
+    permissions:
+      contents: write
+    secrets: inherit
+    with:
+      ref: ${{ needs.check.outputs.sha }}
+      tag: nightly
+
+  test:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    uses: ./.github/workflows/tests.yml
+    secrets: inherit
+    with:
+      ref: ${{ needs.check.outputs.sha }}

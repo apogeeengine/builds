@@ -4,6 +4,17 @@ name: Build
 # repo's free runners: the SDK (mods and maps, no game exports), the editor and the export templates, for Linux,
 # Windows and macOS. Run it by hand with an engine ref; give a tag to publish the binaries as a release.
 on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: main
+      platforms:
+        type: string
+        default: '["linuxbsd", "windows", "macos"]'
+      tag:
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       ref:
@@ -13,7 +24,7 @@ on:
         description: "Platforms to build, a JSON list (a subset of linuxbsd, windows, macos)"
         default: '["linuxbsd", "windows", "macos"]'
       tag:
-        description: "Release tag to publish (empty: build only, keep the artifacts for 14 days)"
+        description: "Release tag to publish (empty: build only, keep the artifacts for 14 days; nightly: replace the nightly prerelease)"
         default: ""
 
 env:
@@ -175,6 +186,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ inputs.tag }}" dist/* --repo "$GITHUB_REPOSITORY" \
+          sha="$(git -C engine rev-parse HEAD)"
+          flags=()
+          if [ "${{ inputs.tag }}" = nightly ]; then
+            # The nightly prerelease is replaced by each build; its `commit:` line tells the next one what was built.
+            gh release delete nightly --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+            flags+=(--prerelease)
+          fi
+          gh release create "${{ inputs.tag }}" dist/* "${flags[@]}" --repo "$GITHUB_REPOSITORY" \
             --title "Apogee Engine ${{ inputs.tag }}" \
-            --notes "Built from apogeeengine/Apogee.Engine @ ${{ inputs.ref }}. The SDK packs mods and maps; the editor and templates are for building games."
+            --notes "commit: $sha
+          Built from apogeeengine/Apogee.Engine @ ${{ inputs.ref }}. The SDK packs mods and maps; the editor and templates are for building games."
