@@ -13,6 +13,8 @@ on:
       ref:
         description: Engine branch, tag or commit
         default: main
+    schedule:
+      - cron: "0 2 * * *"
 
 env:
   SCONS_CACHE: ${{ github.workspace }}/.scons-cache
