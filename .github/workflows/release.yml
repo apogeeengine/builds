@@ -18,8 +18,14 @@ jobs:
       - id: latest
         env:
           GH_TOKEN: ${{ github.token }}
+          SOURCE_KEY: ${{ secrets.ENGINE_DEPLOY_KEY }}
         run: |
-          tag="$(gh api repos/apogeeengine/Apogee.Engine/tags --paginate --jq '.[].name' | sort -V | tail -n1)"
+          set -euo pipefail
+          # The source repo is private: its tags are read with its deploy key (the workflow token can't see it).
+          install -m 600 /dev/null "$RUNNER_TEMP/source_key"
+          printf '%s\n' "$SOURCE_KEY" > "$RUNNER_TEMP/source_key"
+          tag="$(GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/source_key -o StrictHostKeyChecking=accept-new" \
+            git ls-remote --tags --refs git@github.com:apogeeengine/Apogee.Engine.git | sed 's|.*refs/tags/||' | sort -V | tail -n1)"
           test -n "$tag"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then build=false; else build=true; fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
