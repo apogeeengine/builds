@@ -53,14 +53,14 @@ jobs:
         shell: bash
     steps:
       - name: Engine source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: apogeeengine/Apogee.Engine
           ref: ${{ inputs.ref }}
           ssh-key: ${{ secrets.ENGINE_DEPLOY_KEY }}
           path: engine
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -82,7 +82,7 @@ jobs:
         run: Tools/Scripts/install_vulkan_sdk_macos.sh
 
       - name: SCons cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.SCONS_CACHE }}
           key: scons-${{ matrix.platform }}-${{ matrix.name }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -97,7 +97,7 @@ jobs:
       # Saved even when the build fails, so a rerun starts from the objects already built.
       - name: Save the SCons cache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.SCONS_CACHE }}
           key: scons-${{ matrix.platform }}-${{ matrix.name }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -116,7 +116,7 @@ jobs:
           rm -f out/*.lib out/*.exp
           ls -l out
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: apogee-${{ matrix.platform }}-${{ matrix.name }}-${{ env.ARCH }}
           path: out
@@ -131,7 +131,7 @@ jobs:
       contents: write
     steps:
       - name: Engine files for the templates
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: apogeeengine/Apogee.Engine
           ref: ${{ inputs.ref }}
@@ -141,7 +141,7 @@ jobs:
             Tools/Dist/macos_template.app
           sparse-checkout-cone-mode: false
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
