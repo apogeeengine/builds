@@ -1,8 +1,8 @@
 name: Build
 
 # Builds the Apogee Engine from the private source repo (checked out with a read-only deploy key) on this public
-# repo's free runners: the SDK (mods and maps, no game exports), the editor and the export templates, for Linux,
-# Windows and macOS. Run it by hand with an engine ref; give a tag to publish the binaries as a release.
+# repo's free runners: the editor and the export templates, for Linux, Windows and macOS. Run it by hand with an
+# engine ref; give a tag to publish the binaries as a release.
 on:
   workflow_call:
     inputs:
@@ -40,9 +40,8 @@ jobs:
       fail-fast: false
       matrix:
         platform: ${{ fromJSON(inputs.platforms) }}
-        name: [sdk, editor, template_release, template_debug]
+        name: [editor, template_release, template_debug]
         include:
-          - { name: sdk, task: "editor --sdk" }
           - { name: editor, task: editor }
           - { name: template_release, task: "templates --templates release" }
           - { name: template_debug, task: "templates --templates debug" }
@@ -190,4 +189,4 @@ jobs:
           gh release create "${{ inputs.tag }}" dist/* --repo "$GITHUB_REPOSITORY" \
             --title "Apogee Engine ${{ inputs.tag }}" \
             --notes "commit: $sha
-          Built from apogeeengine/Apogee.Engine @ ${{ inputs.ref }}. The SDK packs mods and maps; the editor and templates are for building games."
+          Built from apogeeengine/Apogee.Engine @ ${{ inputs.ref }}. The editor is for making games and mods (Project > Pack Mod...); the templates are for exporting games."

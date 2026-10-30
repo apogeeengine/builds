@@ -5,8 +5,7 @@ Public build pipeline for the [Apogee Engine](https://github.com/apogeeengine) (
 
 | Artifact | What it is |
 |---|---|
-| `apogee-<platform>-sdk-<arch>` | The SDK: the editor that packs mods and maps and exports no games |
-| `apogee-<platform>-editor-<arch>` | The full editor, which exports games |
+| `apogee-<platform>-editor-<arch>` | The editor: it makes games and mods (Project > Pack Mod...) and exports games |
 | `apogee-<platform>-template_release-<arch>`, `template_debug` | The export templates |
 
 Platforms: `linuxbsd`, `windows`, `macos` (universal). Run the workflow with an engine ref; with a tag it publishes the
