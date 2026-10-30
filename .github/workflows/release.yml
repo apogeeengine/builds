@@ -39,4 +39,48 @@ jobs:
     secrets: inherit
     with:
       ref: ${{ needs.check.outputs.tag }}
-      tag: ${{ needs.check.outputs.tag }}
+      tag: ${{ needs.check.outputs.tag }}  # The C++ bindings of the release: apogee-cpp gets the engine's own API (what `./build.sh extension-api` dumps) and is tagged
+  # with the release, so a game pins the tag of the engine it ships with. Off until the repository variable APOGEE_CPP_PUBLISH
+  # is "true" and the secret APOGEE_CPP_DEPLOY_KEY (a deploy key of apogeeengine/apogee-cpp with write access) is set.
+  sdk:
+    needs: [check, build]
+    if: needs.check.outputs.build == 'true' && vars.APOGEE_CPP_PUBLISH == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: The release's editor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "${{ needs.check.outputs.tag }}" --repo "$GITHUB_REPOSITORY" --pattern 'apogee-linuxbsd-editor-x86_64.zip'
+          unzip -q apogee-linuxbsd-editor-x86_64.zip -d editor
+          chmod +x editor/apogee.linuxbsd.editor.x86_64
+
+      - name: The engine's API
+        run: |
+          set -euo pipefail
+          mkdir dump && cd dump
+          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/editor"
+          ../editor/apogee.linuxbsd.editor.x86_64 --headless --dump-extension-api
+          ../editor/apogee.linuxbsd.editor.x86_64 --headless --dump-gdextension-interface-json
+          ../editor/apogee.linuxbsd.editor.x86_64 --headless --dump-gdextension-interface
+          ls -l
+
+      - uses: actions/checkout@v7
+        with:
+          repository: apogeeengine/apogee-cpp
+          ref: main
+          path: sdk
+          ssh-key: ${{ secrets.APOGEE_CPP_DEPLOY_KEY }}
+
+      - name: Publish
+        run: |
+          set -euo pipefail
+          cp dump/extension_api.json dump/gdextension_interface.json sdk/gdextension/
+          cd sdk
+          git config user.name "apogee-builds"
+          git config user.email "builds@apogeeengine.invalid"
+          git add gdextension
+          git diff --cached --quiet || git commit -m "chore: the API of the engine ${{ needs.check.outputs.tag }}"
+          git tag "${{ needs.check.outputs.tag }}"
+          git push origin main "${{ needs.check.outputs.tag }}"
