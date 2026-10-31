@@ -93,6 +93,13 @@ jobs:
           GODOT_SCRIPT_ENCRYPTION_KEY: ${{ secrets.GODOT_SCRIPT_ENCRYPTION_KEY }}
         run: ./build.sh ${{ matrix.task }} --profile release --platform ${{ matrix.platform }} --arch ${{ env.ARCH }}
 
+      # The sample extension, built against this platform's editor with apogee-cpp and loaded by it (releases from before it
+      # existed have no such task).
+      - name: Sample extension
+        if: matrix.name == 'editor' && hashFiles('engine/Samples/extension/project.xml') != ''
+        working-directory: engine
+        run: ./build.sh extension --profile release --platform ${{ matrix.platform }} --arch ${{ env.ARCH }}
+
       # Saved even when the build fails, so a rerun starts from the objects already built.
       - name: Save the SCons cache
         if: always()
